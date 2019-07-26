@@ -6,7 +6,7 @@ on the gRPC website for Go is also pretty complicated, so I decided to
 make my own as simple as I could.
 
 The [[https://github.com/grpc/grpc-go/blob/master/examples/gotutorial.md][gotutorial.md]] in the grpc-go examples is actually more detailed,
-but
+but I made this to be more like a TD;DR.
 
 ** Setting up the environment
 To start off, we'll create a new module.
