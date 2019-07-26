@@ -158,9 +158,7 @@ pip install grpcio-tools
 
 As well as create the Python stub for our interface.
 #+BEGIN_SRC sh
-cd interface
 python -m grpc_tools.protoc --python_out=. --grpc_python_out=. -I interface interface/hello.proto
-cd -
 #+END_SRC
 
 #+BEGIN_SRC python :tangle client.py
