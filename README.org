@@ -1,7 +1,7 @@
 * Hello, gRPC!
 For whatever reason, getting a simple gRPC client/server set up in Go
 was quite tricky for me. While I could get the examples working
-through `go get`, I couldn't recreate them from scratch. The example
+through =go get=, I couldn't recreate them from scratch. The example
 on the gRPC website for Go is also pretty complicated, so I decided to
 make my own as simple as I could.
 
