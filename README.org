@@ -1,0 +1,174 @@
+* Hello, gRPC!
+For whatever reason, getting a simple gRPC client/server set up in Go
+was quite tricky for me. While I could get the examples working
+through `go get`, I couldn't recreate them from scratch. The example
+on the gRPC website for Go is also pretty complicated, so I decided to
+make my own as simple as I could.
+
+The [[https://github.com/grpc/grpc-go/blob/master/examples/gotutorial.md][gotutorial.md]] in the grpc-go examples is actually more detailed,
+but
+
+** Setting up the environment
+To start off, we'll create a new module.
+#+BEGIN_SRC sh
+go mod init hello_grpc
+#+END_SRC
+
+We'll also need to grab the protobuf compiler, as well as the
+respective Go plugin.
+#+BEGIN_SRC sh
+mkdir temp
+cd temp
+wget https://github.com/protocolbuffers/protobuf/releases/download/v3.9.0/protoc-3.9.0-linux-x86_64.zip
+unzip protoc-3.9.0-linux-x86_64.zip
+cp -r include /usr/local
+cp -r bin /usr/local
+cd -
+rm -rf temp
+go get -u github.com/golang/protobuf/protoc-gen-go
+#+END_SRC
+
+** Creating the interface
+This is going to be in a new Go package, so it needs to be in its own
+directory.
+#+BEGIN_SRC sh
+mkdir interface
+#+END_SRC
+
+We're going to have exactly one endpoint in our service, and it's just
+going to print something on the server and not return anything.
+#+BEGIN_SRC protobuf :tangle interface/hello.proto
+syntax = "proto3";
+
+message Empty {}
+
+message String {
+    string msg = 1;
+}
+
+service Hello {
+    rpc Log(String) returns (Empty) {}
+}
+#+END_SRC
+
+Now we'll need to compile it to create our Go files:
+#+BEGIN_SRC sh
+cd interface
+protoc --go_out=plugins=grpc:. hello.proto
+cd -
+#+END_SRC
+
+If all went well, you should see a file called =interface/hello.pb.go=.
+
+** Creating the server
+We need to import that interface by the name of the directory we put
+it in (in our case, =interface=). Aside from that, our client sets up
+a port that it listens to over TCP, and serves our gRPC server on it.
+
+#+BEGIN_SRC go :tangle server.go
+  package main
+
+  import (
+      "context"
+      "flag"
+      "fmt"
+      "log"
+      "net"
+      "google.golang.org/grpc"
+     pb "hello_grpc/interface"
+  )
+
+  var (
+      port = flag.Int("port", 10000, "The server port")
+  )
+
+  type helloServer struct {}
+
+  func (s* helloServer) Log(ctx context.Context, string *pb.String) (*pb.Empty, error) {
+      fmt.Println(string.Msg)
+      return &pb.Empty{}, nil
+  }
+
+  func main() {
+      flag.Parse()
+      lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", *port))
+      if err != nil {
+          log.Fatalf("failed to listen: %v", err)
+      }
+      grpcServer := grpc.NewServer()
+      pb.RegisterHelloServer(grpcServer, &helloServer{})
+      grpcServer.Serve(lis)
+  }
+#+END_SRC
+
+We can run it with
+#+BEGIN_SRC sh
+go run server.go
+#+END_SRC
+(it's going to hang since there's no client talking to it, so you can
+either kill it or start it in the background).
+
+** Creating the client
+#+BEGIN_SRC go :tangle client.go
+  package main
+
+  import (
+      "context"
+      "flag"
+      "log"
+      "time"
+      "google.golang.org/grpc"
+      pb "hello_grpc/interface"
+  )
+
+  var (
+      serverAddr = flag.String("server_addr", "127.0.0.1:10000", "The server address in the format of host:port")
+  )
+
+  func main() {
+      flag.Parse()
+      var opts []grpc.DialOption
+      opts = append(opts, grpc.WithInsecure())
+
+      conn, err := grpc.Dial(*serverAddr, opts...)
+      if err != nil {
+          log.Fatalf("failed to connect: %v", err)
+      }
+      defer conn.Close()
+
+      client := pb.NewHelloClient(conn)
+
+      ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+      defer cancel()
+      _, err = client.Log(ctx, &pb.String{Msg: "Hello, world!"})
+      if err != nil {
+          log.Fatalf("failed to log: %v", err)
+      }
+  }
+#+END_SRC
+** Creating another client
+One of the selling points about gRPC is that it's compatible with many
+languages. Let's write another client in Python. We'll need to install
+the gRPC package, =grpcio=.
+
+#+BEGIN_SRC sh
+pip install grpcio
+pip install grpcio-tools
+#+END_SRC
+
+As well as create the Python stub for our interface.
+#+BEGIN_SRC sh
+cd interface
+python -m grpc_tools.protoc --python_out=. --grpc_python_out=. -I interface interface/hello.proto
+cd -
+#+END_SRC
+
+#+BEGIN_SRC python :tangle client.py
+  import grpc
+  import hello_pb2
+  import hello_pb2_grpc
+
+  with grpc.insecure_channel('localhost:10000') as channel:
+      stub = hello_pb2_grpc.HelloStub(channel)
+      stub.Log(hello_pb2.String(msg="Hello, world!"))
+#+END_SRC
